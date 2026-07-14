@@ -1,56 +1,44 @@
 import csv
 import numpy as np
-import geodesy as gd
+from sgp4.api import Satrec
+import juliandate as jd
+import satkit
+import time
 
-"""take in a tle"""
-def elements_from_tle(file):
-    with open(file , 'r') as f:
-        rows = f.readlines()
+tle = open(r"C:\Users\xa360\Documents\div\NUSTAR.txt")
+unpack_tle = tle.readlines()
+l1 = unpack_tle[1]
+l2 = unpack_tle[2]
 
-        elements = [i for i in csv.reader(rows , delimiter = ' ')]
-        
-        sat_name = elements[0][0] #string
-        norad_id = int(elements[1][1][0:5]) #integer
-        classification = elements[1][1][5] #string
-        internal_designator = elements[1][2:5] #string
-        tle_validity = float(elements[1][5]) #float
-        oneder_meanmotion = float(elements[1][7]) #float
+sc = Satrec.twoline2rv(l1 , l2)
 
-        twoder_meanmotion = elements[1][9] #string
-        twoder_plus = twoder_meanmotion.rfind('+')
-        twoder_minus = twoder_meanmotion.rfind('-')
+def interval(yr0 , month0 , day0 , hr0 , min0 , sec0 , yr1 , month1 , day1 , hr1 , min1 , sec1 , update_int = 60):
+    """update_int (s)"""
 
-        if twoder_plus != -1:
-            twoder_float = float(twoder_meanmotion[:twoder_plus]) * 10**(float(twoder_meanmotion[twoder_plus:])) #float
-        
-        elif twoder_minus != -1:
-            twoder_float = float(twoder_meanmotion[:twoder_minus]) * 10**(float(twoder_meanmotion[twoder_minus:]))
+    start_time = satkit.time(yr0 , month0 , day0 , hr0 , min0 , sec0)
+    end_time = satkit.time(yr1 , month1 , day1 , hr1 , min1 , sec1)
+    sec = sec0
+    min = min0
+    hr = hr0
+    day = day0
+    month = month0
+    yr = yr0
 
-        drag_term = elements[1][10]
-        cntplus = drag_term.rfind('+') #finding last occurrence
-        cntminus = drag_term.rfind('-')
-                
-        if cntplus != -1:
-            dragfloat = float(drag_term[:cntplus]) * 10**(float(drag_term[cntplus:]))
-        
-        elif cntminus != -1:
-            dragfloat = float(drag_term[:cntminus]) * 10**(float(drag_term[cntminus:]))
-            
-        eph_type = int(elements[1][11])
-        elementno_checksum = int(elements[1][13][-1]) #mod10
-        inclination = float(elements[2][4])
-        raan = float(elements[2][5]) #right ascention of the ascending node
-        eccentricity = float(elements[2][6]) / 10**6 #float
-        arg_perigee = float(elements[2][8])
-        mean_anomaly = float(elements[2][9])
-        mean_motion = float(elements[2][10])
-        revno_checksum = float(elements[2][12]) #final element is checksum mod 10
+    while start_time < end_time:
+        julian_time , fr = jd.from_gregorian(yr0 , month0 , day0 , hr0 , min0 , sec) , 0.0
+        e , r , v = sc.sgp4(julian_time , fr)
+        rm = np.array(r) * 10**3
+        vm = np.array(v) * 10**3
+        t_utc = satkit.time(yr0 , month0 , day0 , hr0 , 33 , 0)
+        q = satkit.frametransform.qteme2itrf(t_utc)
+        itrf_pos = q * np.array(rm)
+        itrf_vel = q * np.array(vm)
+        az = np.arctan(itrf_pos[0] / itrf_pos[1]) * 180 / np.pi
+        el = np.arctan(itrf_pos[1] / itrf_pos[2]) * 180 / np.pi
+        time.sleep(update_int)
+        sec += update_int
+        k = round(sec / 60)
+        hr += k
 
-        orb_elements = []
-
-
-if __name__ == "__main__":
-    elements_from_tle(r"C:\Users\xa360\Documents\div\NUSTAR.txt")
-
-
-   
+        print(k)
+    
